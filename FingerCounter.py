@@ -4,25 +4,33 @@ import os
 import Handtracking as htm
 import paho.mqtt.client as mqtt #import the client1
 broker_address = "broker.hivemq.com"
-import time
+sub = []
 wCam, hCam = 2560,1920
+def on_connect(client, userdata, flags, rc):
+  print("Connected with result code " + str(rc))
+  client.subscribe("mqtt/handlethings")
 def on_message(client, userdata, message):
-    print("message received " ,str(message.payload.decode("utf-8")))
-    sub = str(message.payload.decode("utf-8"))
+    print("message received ",str(message.payload.decode("utf-8")))
+    sub.append(message.payload.decode("utf-8"))
     print("message topic=",message.topic)
 
-    if (sub == "ON"):
+def detecthand():
+    while 1:
+        client = mqtt.Client()
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.connect(broker_address, 1883, 60)
+        client.loop_start()
         cap = cv2.VideoCapture(0)
         cap.set(3, wCam)
         cap.set(4, hCam)
-
         folderPath = "FingerImages"
         myList = os.listdir(folderPath)
         print(myList)
         overlayList = []
         for imPath in myList:
             image = cv2.imread(f'{folderPath}/{imPath}')
-            image = cv2.resize(image, (600, 480))
+            image = cv2.resize(image,(600,480))
             # print(f'{folderPath}/{imPath}')
             overlayList.append(image)
 
@@ -33,28 +41,7 @@ def on_message(client, userdata, message):
 
         tipIds = [4, 8, 12, 16, 20]
 
-        cap = cv2.VideoCapture(0)
-        cap.set(3, wCam)
-        cap.set(4, hCam)
-
-        folderPath = "FingerImages"
-        myList = os.listdir(folderPath)
-        print(myList)
-        overlayList = []
-        for imPath in myList:
-            image = cv2.imread(f'{folderPath}/{imPath}')
-            image = cv2.resize(image, (600, 480))
-            # print(f'{folderPath}/{imPath}')
-            overlayList.append(image)
-
-        print(len(overlayList))
-        pTime = 0
-
-        detector = htm.HandDetector(detectionCon=0.75)
-
-        tipIds = [4, 8, 12, 16, 20]
-
-        while True:
+        while(''.join(sub) == "ON"):
             success, img = cap.read()
             img = detector.findHands(img)
             lmList = detector.findPosition(img, draw=False)
@@ -90,22 +77,10 @@ def on_message(client, userdata, message):
             cTime = time.time()
             fps = 1 / (cTime - pTime)
             pTime = cTime
-
             cv2.putText(img, f'FPS: {int(fps)}', (400, 70), cv2.FONT_HERSHEY_PLAIN,
                         3, (255, 0, 0), 3)
-
             cv2.imshow("Image", img)
             cv2.waitKey(1)
-    elif (sub == "OFF"):
-        cv2.VideoCapture(1)
-print("creating new instance")
-client = mqtt.Client("P1") #create new instance
-client.on_message=on_message #attach function to callback
-print("connecting to broker")
-client.connect(broker_address,1883) #connect to broker
+        break
 
-client.loop_start() #start the loop
-print("Subscribing to topic","house/bulbs/bulb1")
-sub=client.subscribe("house/bulbs/bulb1")
-time.sleep(5) # wait
-client.loop_stop() #stop the loop
+detecthand()
